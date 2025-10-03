@@ -1,3 +1,5 @@
+// router.js - Final Exotel/OpenAI/Appointment Router
+
 import express from "express";
 import axios from "axios";
 import Call from "../models/models.js";
@@ -8,11 +10,25 @@ import fsSync from "fs";
 import path from "path";
 import os from "os";
 import mongoose from "mongoose";
-
+// 1. IMPORT AUTHENTICATION MIDDLEWARE
+import { authenticateToken } from "./auth.js";
+// 2. IMPORT AUTHENTICATION ROUTER
+import authRouter from "./auth.js"; // This imports the default export (the router) from auth.js
+ 
 dotenv.config();
 
 const router = express.Router();
 
+// ----------------------------------------------------
+// --- ROUTER INTEGRATION (THE FIX) ---
+// ----------------------------------------------------
+
+// This line integrates the authentication routes (login, register, verify, me)
+// The routes are accessible under the /auth path of this router.
+// E.g., if server.js uses app.use("/api", router), the login path is: /api/auth/login
+router.use('/auth', authRouter);
+
+// ----------------------------------------------------
 // --- Exotel Credentials ---
 const EXOTEL_SID = process.env.EXOTEL_SID;
 const EXOTEL_USER = process.env.EXOTEL_USER;
@@ -52,7 +68,7 @@ const appointmentSchema = new mongoose.Schema({
 
 const Appointment = mongoose.model('Appointment', appointmentSchema);
 
-// --- Helper Functions ---
+// --- Helper Functions (No changes) ---
 async function fetchExotelCalls() {
     try {
         // FIX: Corrected template literal syntax
@@ -87,12 +103,12 @@ async function fetchCallDetails(callSid) {
             Direction: call.Direction || call.direction,
             recordings: call.RecordingUrl
                 ? [
-                    {
-                        Sid: call.Sid,
-                        RecordingUrl: call.RecordingUrl,
-                        CreatedAt: new Date(),
-                    },
-                ]
+                      {
+                          Sid: call.Sid,
+                          RecordingUrl: call.RecordingUrl,
+                          CreatedAt: new Date(),
+                      },
+                  ]
                 : [],
         };
     } catch (err) {
@@ -165,7 +181,14 @@ async function createAppointmentFromCall(callSid, leadDetails) {
     }
 }
 
+// ----------------------------------------------------
+// --- ROUTES (Middleware applied where needed) ---
+// ----------------------------------------------------
+
 // === CRITICAL FIX: ADD THE MISSING ANALYZE-LEAD ENDPOINT ===
+// NOTE: This endpoint is likely called internally by your service
+// after a transcription is complete, so it might not need auth.
+// If it's called by an authenticated user interface, add authenticateToken.
 router.post("/analyze-lead", async (req, res) => {
     try {
         const { callSid, transcription } = req.body;
@@ -192,36 +215,36 @@ router.post("/analyze-lead", async (req, res) => {
 
 EXTRACTION RULES:
 1. NAME EXTRACTION - Look for patterns:
-   - "मेरा नाम है [NAME]" → Extract [NAME]
-   - "मेरा नाम [NAME] है" → Extract [NAME]  
-   - "मैं [NAME] बोल रही हूँ" → Extract [NAME]
-   - "नाम है [NAME]" → Extract [NAME]
+    - "मेरा नाम है [NAME]" → Extract [NAME]
+    - "मेरा नाम [NAME] है" → Extract [NAME]  
+    - "मैं [NAME] बोल रही हूँ" → Extract [NAME]
+    - "नाम है [NAME]" → Extract [NAME]
 
 2. PHONE EXTRACTION - Look for patterns:
-   - "मेरा वाटसप नंबर है [NUMBER]" → Extract [NUMBER]
-   - "मेरा नंबर है [NUMBER]" → Extract [NUMBER]
-   - "वाटसप नंबर [NUMBER]" → Extract [NUMBER]
-   - Any 10-digit number starting with 6,7,8,9
+    - "मेरा वाटसप नंबर है [NUMBER]" → Extract [NUMBER]
+    - "मेरा नंबर है [NUMBER]" → Extract [NUMBER]
+    - "वाटसप नंबर [NUMBER]" → Extract [NUMBER]
+    - Any 10-digit number starting with 6,7,8,9
 
 3. PRODUCT EXTRACTION - Look for: जीन्स, कपड़े, सैमपल्स, ब्लैक, clothing, collection
 
 4. LEAD QUALIFICATION:
-   - Customer wants to buy/see products = TRUE
-   - Has name OR phone = TRUE
-   - Only complaint/status check = FALSE
+    - Customer wants to buy/see products = TRUE
+    - Has name OR phone = TRUE
+    - Only complaint/status check = FALSE
 
 5. APPOINTMENT DETECTION - Look for: मिलना, आना, शाम को, कल, समय
 
 RESPOND IN JSON FORMAT ONLY:
 {
-  "is_lead": boolean,
-  "customer_name": "string",
-  "phone_number": "string", 
-  "product_interest": "string",
-  "customer_need": "string",
-  "is_appointment": boolean,
-  "confidence_score": 0.5,
-  "extraction_method": "gpt4o-mini-api"
+  "is_lead": boolean,
+  "customer_name": "string",
+  "phone_number": "string", 
+  "product_interest": "string",
+  "customer_need": "string",
+  "is_appointment": boolean,
+  "confidence_score": 0.5,
+  "extraction_method": "gpt4o-mini-api"
 }`
                 },
                 {
@@ -310,7 +333,8 @@ RESPOND IN JSON FORMAT ONLY:
 });
 
 // --- APPOINTMENT ROUTES ---
-router.get("/appointments", async (req, res) => {
+// 🔒 Protected: Requires authentication to view appointments
+router.get("/appointments", authenticateToken, async (req, res) => {
     try {
         const {
             status,
@@ -395,7 +419,8 @@ router.get("/appointments", async (req, res) => {
     }
 });
 
-router.post("/appointments", async (req, res) => {
+// 🔒 Protected: Requires authentication to create appointments manually
+router.post("/appointments", authenticateToken, async (req, res) => {
     try {
         const {
             client_name,
@@ -440,7 +465,8 @@ router.post("/appointments", async (req, res) => {
     }
 });
 
-router.put("/appointments/:id", async (req, res) => {
+// 🔒 Protected: Requires authentication to update appointments
+router.put("/appointments/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const updateData = { ...req.body, updated_at: new Date() };
@@ -464,7 +490,8 @@ router.put("/appointments/:id", async (req, res) => {
     }
 });
 
-router.delete("/appointments/:id", async (req, res) => {
+// 🔒 Protected: Requires authentication to delete appointments
+router.delete("/appointments/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -483,7 +510,8 @@ router.delete("/appointments/:id", async (req, res) => {
     }
 });
 
-router.get("/appointments/:id", async (req, res) => {
+// 🔒 Protected: Requires authentication to view a single appointment
+router.get("/appointments/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -500,7 +528,8 @@ router.get("/appointments/:id", async (req, res) => {
     }
 });
 
-router.patch("/appointments/bulk-status", async (req, res) => {
+// 🔒 Protected: Requires authentication for bulk updates
+router.patch("/appointments/bulk-status", authenticateToken, async (req, res) => {
     try {
         const { appointment_ids, status } = req.body;
 
@@ -528,7 +557,8 @@ router.patch("/appointments/bulk-status", async (req, res) => {
     }
 });
 
-router.get("/appointments/stats/summary", async (req, res) => {
+// 🔒 Protected: Requires authentication to view stats
+router.get("/appointments/stats/summary", authenticateToken, async (req, res) => {
     try {
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -583,12 +613,14 @@ router.get("/appointments/stats/summary", async (req, res) => {
 });
 
 // --- EXISTING ROUTES ---
-router.get("/fetch-calls", async (req, res) => {
+// 🔒 Protected: Requires authentication to manually fetch/save calls
+router.get("/fetch-calls", authenticateToken, async (req, res) => {
     await fetchAndSaveCalls();
     res.json({ message: "Calls fetched and saved successfully" });
 });
 
-router.get("/analyze-all-calls", async (req, res) => {
+// 🔒 Protected: Requires authentication to trigger batch analysis
+router.get("/analyze-all-calls", authenticateToken, async (req, res) => {
     try {
         console.log("Starting batch analysis of calls for appointments...");
 
@@ -629,7 +661,8 @@ router.get("/analyze-all-calls", async (req, res) => {
     }
 });
 
-router.get("/calls", async (req, res) => {
+// 🔒 Protected: Requires authentication to view calls list
+router.get("/calls", authenticateToken, async (req, res) => {
     try {
         const { searchId, status, direction, startDate, endDate, page = 1, limit = 20 } = req.query;
         let query = {};
@@ -660,6 +693,7 @@ router.get("/calls", async (req, res) => {
     }
 });
 
+// 🔓 Public: Exotel status callbacks must be publicly accessible
 router.post("/status-callback", async (req, res) => {
     try {
         const { CallSid, RecordingUrl, Status } = req.body;
@@ -682,7 +716,8 @@ router.post("/status-callback", async (req, res) => {
     }
 });
 
-router.post("/outbound-call", async (req, res) => {
+// 🔒 Protected: Requires authentication to manually trigger an outbound call
+router.post("/outbound-call", authenticateToken, async (req, res) => {
     const { toNumber } = req.body;
     if (!toNumber) return res.status(400).json({ error: "toNumber is required" });
     try {
@@ -709,7 +744,8 @@ router.post("/outbound-call", async (req, res) => {
     }
 });
 
-router.get("/recording/:callSid", async (req, res) => {
+// 🔒 Protected: Requires authentication to access recording
+router.get("/recording/:callSid", authenticateToken, async (req, res) => {
     const { callSid } = req.params;
     try {
         const callDetails = await fetchCallDetails(callSid);
@@ -730,7 +766,8 @@ router.get("/recording/:callSid", async (req, res) => {
     }
 });
 
-router.post("/transcribe/:callSid", async (req, res) => {
+// 🔒 Protected: Requires authentication to manually trigger transcription
+router.post("/transcribe/:callSid", authenticateToken, async (req, res) => {
     const { callSid } = req.params;
     let tempFilePath = '';
 
@@ -792,7 +829,8 @@ router.post("/transcribe/:callSid", async (req, res) => {
     }
 });
 
-router.post("/summarize", async (req, res) => {
+// 🔒 Protected: Requires authentication to summarize calls
+router.post("/summarize", authenticateToken, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: "text is required" });
     try {
@@ -813,4 +851,9 @@ router.post("/summarize", async (req, res) => {
     }
 });
 
+// ----------------------------------------------------
+// --- FINAL EXPORT ---
+// ----------------------------------------------------
+
+// Exports the combined router as the default and the utility function fetchAndSaveCalls as named
 export default router;

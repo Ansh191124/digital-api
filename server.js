@@ -1,28 +1,38 @@
+// server.js
+
+// 1. Load environment variables first (CRUCIAL for JWT_SECRET and MONGODB_URI)
+import 'dotenv/config'; 
+
 import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
 import mongoose from "mongoose";
 import cors from "cors";
+// 🎯 Import the default router and the named utility function from the integrated API file
 import apiRoutes, { fetchAndSaveCalls } from "./routes/api.js";
-import Call from "./models/models.js";
+import Call from "./models/models.js"; // Ensure this path is correct
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-const PORT = 4000;
+const PORT = process.env.PORT || 4000; 
 
-app.use(cors());
+// --- MIDDLEWARE ---
+// Configure CORS
+app.use(cors({
+    origin: ['http://localhost:3000', 'https://digital-api-tef8-frontend.vercel.app'], 
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+}));
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect("mongodb+srv://mransh1911:cNSfRzK07rQGKZWr@cluster0.rbzvilx.mongodb.net/" , {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGODB_URI) 
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
-// Use API routes
+// 🎯 Use the single, integrated API router
+// Authentication routes are now accessible via /api/auth/...
 app.use("/api", apiRoutes);
 
 app.get("/", (req, res) => res.send("Backend running"));
@@ -32,17 +42,15 @@ let clients = [];
 wss.on('connection', (ws) => {
   clients.push(ws);
   console.log('Client connected to WebSocket.');
-
+  // ... (rest of WebSocket logic)
   ws.on('close', () => {
     clients = clients.filter(client => client !== ws);
     console.log('Client disconnected from WebSocket.');
   });
 });
 
-// Function to send new data to all connected clients
 const sendUpdatesToClients = async () => {
   try {
-    // Find calls with a transcription that haven't been processed yet
     const newTranscribedCalls = await Call.find({
       transcription: { $exists: true, $ne: null, $ne: "" },
       is_processed: false
@@ -50,13 +58,11 @@ const sendUpdatesToClients = async () => {
 
     if (newTranscribedCalls.length > 0) {
       console.log(`Found ${newTranscribedCalls.length} new transcribed calls to broadcast.`);
-      // Send the data to all connected clients
       clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify(newTranscribedCalls));
         }
       });
-      // Mark the calls as processed to avoid re-sending them
       await Call.updateMany(
         { _id: { $in: newTranscribedCalls.map(call => call._id) } },
         { $set: { is_processed: true } }
@@ -68,14 +74,14 @@ const sendUpdatesToClients = async () => {
   }
 };
 
-// Polling interval to check for new transcriptions (e.g., every 5 seconds)
 const POLLING_INTERVAL = 5 * 1000;
 setInterval(sendUpdatesToClients, POLLING_INTERVAL);
 
 // --- AUTO FETCH FROM EXOTEL API ---
-const EXOTEL_FETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes in ms
+const EXOTEL_FETCH_INTERVAL = 5 * 60 * 1000;
 setInterval(() => {
   console.log("Auto-fetching calls from Exotel...");
+  // 🎯 Calls the named function imported from apiRoutes
   fetchAndSaveCalls();
 }, EXOTEL_FETCH_INTERVAL);
 
