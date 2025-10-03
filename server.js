@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 4000;
 // --- MIDDLEWARE ---
 // Configure CORS
 app.use(cors({
-    origin: ['http://localhost:3000', 'https://digital-api-tef8-frontend.vercel.app'], 
+    origin: ['http://localhost:3000', 'https://d-igital-bot.vercel.app/'], 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
 }));
