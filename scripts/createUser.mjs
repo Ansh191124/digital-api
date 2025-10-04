@@ -27,7 +27,7 @@ const User = mongoose.model('User', userSchema);
 
 async function createUser() {
   try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/exotelDB');
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://mransh1911:cNSfRzK07rQGKZWr@cluster0.rbzvilx.mongodb.net/');
     console.log('Connected to MongoDB\n');
 
     const email = await ask('Enter email: ');

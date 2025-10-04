@@ -85,4 +85,4 @@ setInterval(() => {
   fetchAndSaveCalls();
 }, EXOTEL_FETCH_INTERVAL);
 
-server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Server running on https://digital-api-tef8.onrender.com`));
