@@ -73,7 +73,7 @@ async function fetchExotelCalls() {
     try {
         // FIX: Corrected template literal syntax
         const res = await axios.get(
-            `https://api.exotel.com/v1/Accounts/${EXOTEL_SID}/Calls.json?PageSize=50`,
+            `https://api.exotel.com/v1/Accounts/meticai1/Calls.json?PageSize=50`,
             { headers }
         );
         return res.data.Calls || [];
